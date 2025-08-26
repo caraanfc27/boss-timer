@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Boss Spawn Timer</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        text-align: center;
+        color: white;
+      }
+      h1 {
+        margin-bottom: 20px;
+      }
+      table {
+        width: 70%;
+        margin: 0 auto;
+        border-collapse: collapse;
+        color: white;
+        border: 1px solid #ccc;
+      }
+      th,
+      td {
+        padding: 8px 12px;
+        text-align: center;
+      }
+      th {
+        background-color: #02172b;
+      }
+      button {
+        padding: 10px 40px;
+        margin: 2px;
+        font-size: 14px;
+        cursor: pointer;
+        border: 1px solid white;
+        background-color: transparent;
+        color: white;
+        transition: all 0.3s ease;
+        border-radius: 5px;
+      }
+      button:hover {
+        background-color: white;
+        color: black;
+      }
+      button:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+        border-color: #ccc;
+        color: #666;
+      }
+      .status.ready {
+        color: lightgreen;
+        font-weight: bold;
+      }
+      .status.dead {
+        color: #ff6b6b;
+        font-weight: bold;
+      }
+      .countdown {
+        font-weight: bold;
+      }
+      .button-container {
+        width: 70%;
+        margin: 10px auto 0 auto;
+        text-align: left;
+      }
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 1;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.4);
+        padding-top: 50px;
+      }
+      .modal-content {
+        background-color: #02172b;
+        color: white;
+        margin: 5% auto;
+        padding: 20px;
+        border: 1px solid #888;
+        width: 40%;
+        border-radius: 10px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: auto;
+        align-items: center;
+      }
+      .close {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+      }
+      .close:hover,
+      .close:focus {
+        color: white;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      input[type="text"],
+      input[type="time"] {
+        padding: 8px;
+        margin: 10px 0;
+        width: 50%;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        background-color: #393c57;
+        color: white;
+      }
+      input[type="text"]:focus,
+      input[type="time"]:focus {
+        outline: none;
+        border-color: #fff;
+      }
+      tr.selected {
+        background-color: #21233b !important;
+      }
+      .modal-title {
+        width: 100%;
+      }
+      .killBtn:hover,
+      #deleteSelectedBtn:hover {
+        background-color: rgb(187, 61, 71);
+        color: black;
+        border: none;
+      }
+      .editBtn:hover {
+        background-color: rgb(127, 202, 174);
+        color: black;
+        border: none;
+      }
+      #addBossBtn:hover,
+      .resetBtn:hover {
+        background-color: rgb(61, 80, 187);
+        color: black;
+        border: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Boss Spawn Timer</h1>
+    <table id="bossTable">
+      <thead>
+        <tr>
+          <th>Boss Name</th>
+          <th>Time Killed</th>
+          <th>Respawn Countdown</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="button-container">
+      <button id="addBossBtn">Add Boss</button>
+      <button id="deleteSelectedBtn" disabled>Delete</button>
+    </div>
+
+    <!-- Add Boss Modal -->
+    <div id="addBossModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-title">
+          <span class="close" id="closeModal">&times;</span>
+        </div>
+        <label for="bossName">Boss Name:</label>
+        <input type="text" id="bossName" placeholder="Enter boss name" />
+        <label for="respawnTime">Respawn Time:</label>
+        <input type="text" id="respawnTime" placeholder="e.g. 2h 30m" />
+        <button id="submitBossBtn">Add Boss</button>
+      </div>
+    </div>
+
+    <!-- Edit Killed Time Modal -->
+    <div id="editModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-title">
+          <span class="close" id="closeEditModal">&times;</span>
+        </div>
+        <label for="editKilledAtTime">Time Killed:</label>
+        <input type="time" id="editKilledAtTime" />
+        <button id="saveEditBtn">Save</button>
+      </div>
+    </div>
+
+    <script>
+      // Utility functions
+      function parseRespawnTime(respawnStr) {
+        const regex = /(\d+)([hm])/g;
+        let totalSeconds = 0,
+          match;
+        while ((match = regex.exec(respawnStr)) !== null) {
+          const value = parseInt(match[1], 10),
+            unit = match[2];
+          totalSeconds += unit === "h" ? value * 3600 : value * 60;
+        }
+        return totalSeconds;
+      }
+
+      function formatTime(seconds) {
+        const h = Math.floor(seconds / 3600)
+          .toString()
+          .padStart(2, "0");
+        const m = Math.floor((seconds % 3600) / 60)
+          .toString()
+          .padStart(2, "0");
+        const s = (seconds % 60).toString().padStart(2, "0");
+        return `${h}:${m}:${s}`;
+      }
+
+      function saveState() {
+        const clean = state.map(({ countdownInterval, ...rest }) => rest);
+        localStorage.setItem("bossState", JSON.stringify(clean));
+      }
+
+      function loadState() {
+        const saved = localStorage.getItem("bossState");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            return parsed.map((boss) => ({
+              ...boss,
+              countdownInterval: null,
+              killBtnDisabled: false,
+            }));
+          } catch {}
+        }
+        return [
+          {
+            name: "Venatus",
+            respawn: parseRespawnTime("10h"),
+            killedAt: null,
+            countdownInterval: null,
+            killBtnDisabled: false,
+          },
+          {
+            name: "Viorent",
+            respawn: parseRespawnTime("10h"),
+            killedAt: null,
+            countdownInterval: null,
+            killBtnDisabled: false,
+          },
+          {
+            name: "Ego",
+            respawn: parseRespawnTime("21h"),
+            killedAt: null,
+            countdownInterval: null,
+            killBtnDisabled: false,
+          },
+          {
+            name: "Livera",
+            respawn: parseRespawnTime("24h"),
+            killedAt: null,
+            countdownInterval: null,
+            killBtnDisabled: false,
+          },
+          {
+            name: "Araneo",
+            respawn: parseRespawnTime("24h"),
+            killedAt: null,
+            countdownInterval: null,
+            killBtnDisabled: false,
+          },
+          {
+            name: "Undomiel",
+            respawn: parseRespawnTime("24h"),
+            killedAt: null,
+            countdownInterval: null,
+            killBtnDisabled: false,
+          },
+          {
+            name: "Lady Dalia",
+            respawn: parseRespawnTime("18h"),
+            killedAt: null,
+            countdownInterval: null,
+            killBtnDisabled: false,
+          },
+          {
+            name: "General Aquleus",
+            respawn: parseRespawnTime("29h"),
+            killedAt: null,
+            countdownInterval: null,
+            killBtnDisabled: false,
+          },
+          {
+            name: "Amentis",
+            respawn: parseRespawnTime("29h"),
+            killedAt: null,
+            countdownInterval: null,
+            killBtnDisabled: false,
+          },
+          {
+            name: "Baron Braudmore",
+            respawn: parseRespawnTime("32h"),
+            killedAt: null,
+            countdownInterval: null,
+            killBtnDisabled: false,
+          },
+          {
+            name: "Wannitas",
+            respawn: parseRespawnTime("48h"),
+            killedAt: null,
+            countdownInterval: null,
+            killBtnDisabled: false,
+          },
+          {
+            name: "Metus",
+            respawn: parseRespawnTime("48h"),
+            killedAt: null,
+            countdownInterval: null,
+            killBtnDisabled: false,
+          },
+          {
+            name: "Duplican",
+            respawn: parseRespawnTime("48h"),
+            killedAt: null,
+            countdownInterval: null,
+            killBtnDisabled: false,
+          },
+          {
+            name: "Shuliar",
+            respawn: parseRespawnTime("35h"),
+            killedAt: null,
+            countdownInterval: null,
+            killBtnDisabled: false,
+          },
+        ];
+      }
+
+      let state = loadState();
+      const tbody = document.querySelector("#bossTable tbody");
+      const deleteSelectedBtn = document.getElementById("deleteSelectedBtn");
+      let selectedIndex = null;
+
+      // Status updater
+      function updateStatus(row, item) {
+        const statusCell = row.querySelector(".status");
+        const countdownCell = row.querySelector(".countdown");
+        const killedAtCell = row.querySelector(".killedAt");
+        const killBtn = row.querySelector(".killBtn");
+
+        if (item.killedAt === null) {
+          statusCell.textContent = "";
+          countdownCell.textContent = "";
+          killBtn.disabled = false;
+          killedAtCell.textContent = "-";
+        } else {
+          const elapsed = Math.floor((Date.now() - item.killedAt) / 1000);
+          const remaining = item.respawn - elapsed;
+          if (remaining <= 0) {
+            statusCell.textContent = "Ready";
+            statusCell.className = "status ready";
+            countdownCell.textContent = "";
+            killBtn.disabled = false;
+            killedAtCell.textContent = "-";
+            if (item.countdownInterval) {
+              clearInterval(item.countdownInterval);
+              item.countdownInterval = null;
+            }
+            item.killedAt = null;
+            saveState();
+          } else {
+            statusCell.textContent = "Dead";
+            statusCell.className = "status dead";
+            countdownCell.textContent = formatTime(remaining);
+            countdownCell.className = "countdown";
+            countdownCell.style.color = remaining > 60 ? "#ff6b6b" : "green";
+            killBtn.disabled = true;
+          }
+        }
+      }
+
+      // Create table row
+      function createRow(item, index) {
+        const row = document.createElement("tr");
+        row.dataset.index = index;
+        row.innerHTML = `
+        <td>${item.name}</td>
+        <td class="killedAt">${
+          item.killedAt ? new Date(item.killedAt).toLocaleTimeString() : "-"
+        }</td>
+        <td class="countdown"></td>
+        <td class="status ready">Ready</td>
+        <td>
+          <button class="killBtn">Killed</button>
+          <button class="resetBtn">Reset</button>
+          <button class="editBtn">Edit</button>
+        </td>
+      `;
+
+        // Row selection
+        row.addEventListener("click", (e) => {
+          if (e.target.tagName === "BUTTON") return;
+          if (selectedIndex !== null && tbody.children[selectedIndex]) {
+            tbody.children[selectedIndex].classList.remove("selected");
+          }
+          selectedIndex = index;
+          row.classList.add("selected");
+          deleteSelectedBtn.disabled = false;
+        });
+
+        const killedAtCell = row.querySelector(".killedAt");
+        const killBtn = row.querySelector(".killBtn");
+        const resetBtn = row.querySelector(".resetBtn");
+        const editBtn = row.querySelector(".editBtn");
+
+        killBtn.addEventListener("click", () => {
+          item.killedAt = Date.now();
+          killedAtCell.textContent = new Date(
+            item.killedAt
+          ).toLocaleTimeString();
+          if (item.countdownInterval) clearInterval(item.countdownInterval);
+          item.countdownInterval = setInterval(() => {
+            updateStatus(row, item);
+            saveState();
+          }, 1000);
+          updateStatus(row, item);
+          saveState();
+        });
+
+        resetBtn.addEventListener("click", () => {
+          item.killedAt = null;
+          killedAtCell.textContent = "-";
+          clearInterval(item.countdownInterval);
+          item.countdownInterval = null;
+          updateStatus(row, item);
+          saveState();
+        });
+
+        editBtn.addEventListener("click", () => {
+          editingIndex = index;
+          if (item.killedAt) {
+            const dt = new Date(item.killedAt);
+            editKilledAtInput.value = dt.toTimeString().slice(0, 5);
+          } else {
+            editKilledAtInput.value = "";
+          }
+          editModal.style.display = "block";
+        });
+
+        updateStatus(row, item);
+        return row;
+      }
+
+      function refreshTable() {
+        state.forEach((item) => {
+          if (item.countdownInterval) {
+            clearInterval(item.countdownInterval);
+            item.countdownInterval = null;
+          }
+        });
+        tbody.innerHTML = "";
+        state.forEach((item, idx) => {
+          const row = createRow(item, idx);
+          tbody.appendChild(row);
+          if (item.killedAt !== null) {
+            item.countdownInterval = setInterval(() => {
+              updateStatus(row, item);
+              saveState();
+            }, 1000);
+            updateStatus(row, item);
+          }
+        });
+        selectedIndex = null;
+        deleteSelectedBtn.disabled = true;
+      }
+
+      refreshTable();
+
+      // Modal logic for Add Boss
+      const modal = document.getElementById("addBossModal");
+      const closeModal = document.getElementById("closeModal");
+      const addBossBtn = document.getElementById("addBossBtn");
+      const submitBossBtn = document.getElementById("submitBossBtn");
+      const bossNameInput = document.getElementById("bossName");
+      const respawnTimeInput = document.getElementById("respawnTime");
+
+      addBossBtn.onclick = () => (modal.style.display = "block");
+      closeModal.onclick = () => (modal.style.display = "none");
+      window.onclick = (e) => {
+        if (e.target === modal) modal.style.display = "none";
+      };
+
+      submitBossBtn.onclick = () => {
+        const name = bossNameInput.value.trim();
+        const resp = respawnTimeInput.value.trim();
+        if (!name || !resp) {
+          alert("Please enter both boss name and respawn time.");
+          return;
+        }
+        const sec = parseRespawnTime(resp);
+        if (sec <= 0) {
+          alert("Invalid respawn time. Use format e.g. 2h 30m.");
+          return;
+        }
+        state.push({
+          name,
+          respawn: sec,
+          killedAt: null,
+          countdownInterval: null,
+          killBtnDisabled: false,
+        });
+        saveState();
+        refreshTable();
+        modal.style.display = "none";
+        bossNameInput.value = "";
+        respawnTimeInput.value = "";
+      };
+
+      // Delete logic
+      deleteSelectedBtn.onclick = () => {
+        if (selectedIndex !== null) {
+          state.splice(selectedIndex, 1);
+          selectedIndex = null;
+          deleteSelectedBtn.disabled = true;
+          saveState();
+          refreshTable();
+        }
+      };
+
+      // Modal logic for Edit Killed Time
+      const editModal = document.getElementById("editModal");
+      const closeEditModal = document.getElementById("closeEditModal");
+      const editKilledAtInput = document.getElementById("editKilledAtTime");
+      const saveEditBtn = document.getElementById("saveEditBtn");
+      let editingIndex = null;
+
+      closeEditModal.onclick = () => (editModal.style.display = "none");
+      window.onclick = (e) => {
+        if (e.target === editModal) editModal.style.display = "none";
+      };
+
+      saveEditBtn.onclick = () => {
+        if (editingIndex === null) return;
+        const inputVal = editKilledAtInput.value;
+        if (!inputVal) {
+          alert("Please enter a time.");
+          return;
+        }
+
+        const now = new Date();
+        const [h, m] = inputVal.split(":").map(Number);
+        let dt = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+          h,
+          m,
+          0
+        );
+        if (dt > now) dt.setDate(dt.getDate() - 1);
+
+        const item = state[editingIndex];
+        item.killedAt = dt.getTime();
+        if (item.countdownInterval) clearInterval(item.countdownInterval);
+
+        const row = tbody.children[editingIndex];
+        item.countdownInterval = setInterval(() => {
+          updateStatus(row, item);
+          saveState();
+        }, 1000);
+
+        updateStatus(row, item);
+        saveState();
+        refreshTable();
+        editModal.style.display = "none";
+      };
+    </script>
+  </body>
+</html>
