@@ -125,7 +125,7 @@ export default function BossSpawnTimer() {
 
   return (
     <div>
-      <h1>Boss Spawn Timer</h1>
+      <h1>Cheesecake Boss Spawn Timer</h1>
       <table>
         <thead>
           <tr>
